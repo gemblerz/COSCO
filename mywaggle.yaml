@@ -1,0 +1,19 @@
+hosts:
+- name: W001
+  type: wildnode
+  group: chicago
+- name: W002
+  type: wildnode
+  group: chicago
+- name: W003
+  type: wildnode
+  group: chicago
+- name: W004
+  type: wildnode
+  group: chicago
+- name: W005
+  type: wildnode
+  group: chicago
+- name: W006
+  type: wildnode
+  group: chicago

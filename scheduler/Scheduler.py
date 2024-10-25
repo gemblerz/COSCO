@@ -119,8 +119,8 @@ class Scheduler():
             containerIDs = self.env.getContainersOfHost(hostID)
             ramSize = [self.env.containerlist[cid].getContainerSize() for cid in containerIDs]
             if ramSize:
-	            mmtContainerID = containerIDs[ramSize.index(min(ramSize))]
-	            selectedContainerIDs.append(mmtContainerID)
+                mmtContainerID = containerIDs[ramSize.index(min(ramSize))]
+                selectedContainerIDs.append(mmtContainerID)
         return selectedContainerIDs
 
     def MaxUseContainerSelection(self, selectedHostIDs):

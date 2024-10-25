@@ -22,6 +22,7 @@ from framework.workload.AIoTBenchWorkload import *
 # Simulator imports
 from simulator.Simulator import *
 from simulator.environment.AzureFog import *
+from simulator.environment.WaggleFog import *
 from simulator.environment.BitbrainFog import *
 from simulator.workload.BitbrainWorkload2 import *
 from simulator.workload.Azure2017Workload import *
@@ -59,8 +60,10 @@ from pdb import set_trace as bp
 usage = "usage: python main.py -e <environment> -m <mode> # empty environment run simulator"
 
 parser = optparse.OptionParser(usage=usage)
-parser.add_option("-e", "--environment", action="store", dest="env", default="", 
-					help="Environment is AWS, Openstack, Azure, VLAN, Vagrant")
+parser.add_option("-e", "--environment", action="store", dest="env", default="sim", 
+					help="Environment is Sim, AWS, Openstack, Azure, VLAN, Vagrant, Waggle")
+parser.add_option("-c", "--configuration", action="store", dest="conf", default="", 
+					help="Configurations in yaml for hosts, simulation, etc.")
 parser.add_option("-m", "--mode", action="store", dest="mode", default="0", 
 					help="Mode is 0 (Create and destroy), 1 (Create), 2 (No op), 3 (Destroy)")
 opts, args = parser.parse_args()
@@ -91,6 +94,8 @@ def initalizeEnvironment(environment, logger):
 	''' Can be SimpleFog, BitbrainFog, AzureFog // Datacenter '''
 	if environment != '':
 		datacenter = Datacenter(HOSTS_IP, environment, 'Virtual')
+	elif environment.lower() == "waggle":
+		datacenter = WaggleFog(args.conf)
 	else:
 		datacenter = AzureFog(HOSTS)
 
@@ -169,7 +174,7 @@ def saveStats(stats, datacenter, workload, env, end=True):
 		saved_env, saved_workload, saved_datacenter, saved_scheduler, saved_sim_scheduler = stats.env, stats.workload, stats.datacenter, stats.scheduler, stats.simulated_scheduler
 		stats.env, stats.workload, stats.datacenter, stats.scheduler, stats.simulated_scheduler = None, None, None, None, None
 		with open(dirname + '/' + dirname.split('/')[1] +'.pk', 'wb') as handle:
-		    pickle.dump(stats, handle)
+			pickle.dump(stats, handle)
 		stats.env, stats.workload, stats.datacenter, stats.scheduler, stats.simulated_scheduler = saved_env, saved_workload, saved_datacenter, saved_scheduler, saved_sim_scheduler
 	if not end: return
 	stats.generateGraphs(dirname)
