@@ -1,4 +1,5 @@
 import numpy as np
+from simulator.host.Host import *
 from simulator.host.Disk import *
 from simulator.host.RAM import *
 from simulator.host.Bandwidth import *
@@ -34,5 +35,5 @@ class SimpleFog():
 			Disk_ = Disk(self.types['DiskSize'][typeID], self.types['DiskRead'][typeID], self.types['DiskWrite'][typeID])
 			Bw = Bandwidth(self.types['BwUp'][typeID], self.types['BwDown'][typeID])
 			Power = PMConstant(self.types['Power'][typeID]) if typeID < 1 else PMRaspberryPi()
-			hosts.append((IPS, Ram, Disk_, Bw, 0, Power))
+			hosts.append(Host(IPS, Ram, Disk_, Bw, 0, Power))
 		return hosts

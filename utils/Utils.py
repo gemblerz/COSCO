@@ -20,3 +20,8 @@ def unixify(paths):
 		for file in os.listdir(path):
 			if '.py' in file or '.sh' in file:
 				_ = os.system("bash -c \"dos2unix "+path+file+" 2&> /dev/null\"")
+
+class dotdict(dict):
+	__getattr__ = dict.get
+	__setattr__ = dict.__setitem__
+	__delattr__ = dict.__delitem__

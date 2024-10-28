@@ -1,18 +1,16 @@
 import numpy as np
-import yaml
+import logging as logger
+from simulator.host.Host import *
 from simulator.host.Disk import *
 from simulator.host.RAM import *
 from simulator.host.Bandwidth import *
+from metrics.powermodels.PMJetsonXavierNX import *
 from metrics.powermodels.PMRaspberryPi import *
-from metrics.powermodels.PMB2s import *
-from metrics.powermodels.PMB4ms import *
-from metrics.powermodels.PMB8ms import *
-from metrics.powermodels.PMXeon_X5570 import *
-from metrics.powermodels.PMConstant import *
 
 class WaggleFog():
-	def __init__(self, config):
-		self.setup = yaml.load(config)
+	def __init__(self, hosts):
+		self.hosts = hosts
+		self.num_hosts = len(hosts)
 		self.types = {
 			'wildnode': {
 				"IPS": 100000,
@@ -28,14 +26,23 @@ class WaggleFog():
  		}
 
 	def generateHosts(self):
-		print(self.setup)
 		hosts = []
-		for i in range(self.num_hosts):
-			typeID = i%3 # np.random.randint(0,3) # i%3 #
-			IPS = self.types['IPS'][typeID]
-			Ram = RAM(self.types['RAMSize'][typeID], self.types['RAMRead'][typeID], self.types['RAMWrite'][typeID])
-			Disk_ = Disk(self.types['DiskSize'][typeID], self.types['DiskRead'][typeID], self.types['DiskWrite'][typeID])
-			Bw = Bandwidth(self.types['BwUp'][typeID], self.types['BwDown'][typeID])
-			Power = PMConstant(self.types['Power'][typeID]) if typeID < 1 else PMRaspberryPi()
-			hosts.append((IPS, Ram, Disk_, Bw, 0, Power))
+		groups = []
+		for host in self.hosts:
+			logger.debug(f'generating a host for {host}')
+			typeID = host["type"]
+			IPS = self.types[typeID]['IPS']
+			Ram = RAM(self.types[typeID]['RAMSize'], self.types[typeID]['RAMRead']*5, self.types[typeID]['RAMWrite']*5)
+			Disk_ = Disk(self.types[typeID]['DiskSize'], self.types[typeID]['DiskRead']*5, self.types[typeID]['DiskWrite']*10)
+			Bw = Bandwidth(self.types[typeID]['BwUp'], self.types[typeID]['BwDown'])
+			Power = PMJetsonXavierNX()
+			groupName = host["group"]
+			if groupName in groups:
+				groupID = groups.index(groupName)
+			else:
+				groups.append(groupName)
+				groupID = groups.index(groupName)
+
+			# Latency = 0.003 if i < self.edge_hosts else 0.076
+			hosts.append(Host(IPS, Ram, Disk_, Bw, 0, Power, groupID))
 		return hosts

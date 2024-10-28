@@ -1,3 +1,5 @@
+from typing import List
+
 from simulator.host.Host import *
 from simulator.container.Container import *
 
@@ -5,7 +7,7 @@ class Simulator():
 	# Total power in watt
 	# Total Router Bw
 	# Interval Time in seconds
-	def __init__(self, TotalPower, RouterBw, Scheduler, ContainerLimit, IntervalTime, hostinit):
+	def __init__(self, TotalPower, RouterBw, Scheduler, ContainerLimit, IntervalTime, hostinit: List[Host]):
 		self.totalpower = TotalPower
 		self.totalbw = RouterBw
 		self.hostlimit = len(hostinit)
@@ -20,15 +22,15 @@ class Simulator():
 		self.stats = None
 		self.addHostlistInit(hostinit)
 
-	def addHostInit(self, IPS, RAM, Disk, Bw, Latency, Powermodel):
+	def addHostInit(self, host):
 		assert len(self.hostlist) < self.hostlimit
-		host = Host(len(self.hostlist), IPS, RAM, Disk, Bw, Latency, Powermodel, self)
+		host.associate(len(self.hostlist), self)
 		self.hostlist.append(host)
 
 	def addHostlistInit(self, hostList):
 		assert len(hostList) == self.hostlimit
-		for IPS, RAM, Disk, Bw, Latency, Powermodel in hostList:
-			self.addHostInit(IPS, RAM, Disk, Bw, Latency, Powermodel)
+		for host in hostList:
+			self.addHostInit(host)
 
 	def addContainerInit(self, CreationID, CreationInterval, IPSModel, RAMModel, DiskModel):
 		container = Container(len(self.containerlist), CreationID, CreationInterval, IPSModel, RAMModel, DiskModel, self, HostID = -1)

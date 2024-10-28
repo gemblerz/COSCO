@@ -7,6 +7,7 @@ import pickle
 import shutil
 import sqlite3
 import platform
+import yaml
 from time import time
 from subprocess import call
 from os import system, rename
@@ -51,6 +52,7 @@ from scheduler.HGOBI import HGOBIScheduler
 from scheduler.HGOBI2 import HGOBI2Scheduler
 from scheduler.HSOGOBI import HSOGOBIScheduler
 from scheduler.HSOGOBI2 import HSOGOBI2Scheduler
+from scheduler.waggle_scheduler import WaggleScheduler
 
 # Auxiliary imports
 from stats.Stats import *
@@ -62,14 +64,16 @@ usage = "usage: python main.py -e <environment> -m <mode> # empty environment ru
 parser = optparse.OptionParser(usage=usage)
 parser.add_option("-e", "--environment", action="store", dest="env", default="sim", 
 					help="Environment is Sim, AWS, Openstack, Azure, VLAN, Vagrant, Waggle")
-parser.add_option("-c", "--configuration", action="store", dest="conf", default="", 
+parser.add_option("-c", "--configuration", action="store", dest="config", default="", 
 					help="Configurations in yaml for hosts, simulation, etc.")
+parser.add_option("-w", "--workload", action="store", dest="workload", default="Bitbrain", 
+					help="Workload is Bitbrain, Waggle")
 parser.add_option("-m", "--mode", action="store", dest="mode", default="0", 
 					help="Mode is 0 (Create and destroy), 1 (Create), 2 (No op), 3 (Destroy)")
 opts, args = parser.parse_args()
 
 # Global constants
-NUM_SIM_STEPS = 100
+NUM_SIM_STEPS = 20
 HOSTS = 10 * 5 if opts.env == '' else 10
 CONTAINERS = HOSTS
 TOTAL_POWER = 1000
@@ -85,37 +89,43 @@ logFile = 'COSCO.log'
 if len(sys.argv) > 1:
 	with open(logFile, 'w'): os.utime(logFile, None)
 
-def initalizeEnvironment(environment, logger):
-	if environment != '':
-		# Initialize the db
-		db = Database(DB_NAME, DB_HOST, DB_PORT)
-
+def initalizeEnvironment(config, logger):
 	# Initialize simple fog datacenter
 	''' Can be SimpleFog, BitbrainFog, AzureFog // Datacenter '''
-	if environment != '':
-		datacenter = Datacenter(HOSTS_IP, environment, 'Virtual')
-	elif environment.lower() == "waggle":
-		datacenter = WaggleFog(args.conf)
+	config_env = config.env.lower()
+	if config_env == "waggle":
+		datacenter = WaggleFog(config.hosts)
+	elif config_env != '':
+		datacenter = Datacenter(HOSTS_IP, config.env, 'Virtual')
 	else:
 		datacenter = AzureFog(HOSTS)
 
 	# Initialize workload
 	''' Can be SWSD, BWGD2, Azure2017Workload, Azure2019Workload // DFW, AIoTW '''
-	if environment != '':
-		workload = DFW(NEW_CONTAINERS, 1.5, db)
-	else: 
+	config_workload = config.workload.lower()
+	if config_workload == 'bitbrain':
 		workload = BWGD2(NEW_CONTAINERS, 1.5)
-	
+	elif config_workload != '':
+		# NOTE: the following breaks because of the db
+		workload = DFW(NEW_CONTAINERS, 1.5, db)
+	else:
+		workload = BWGD2(NEW_CONTAINERS, 1.5)
+	hostlist = datacenter.generateHosts()
+
 	# Initialize scheduler
 	''' Can be LRMMTR, RF, RL, RM, Random, RLRMMTR, TMCR, TMMR, TMMTR, GA, GOBI (arg = 'energy_latency_'+str(HOSTS)) '''
-	scheduler = GOBIScheduler('energy_latency_'+str(HOSTS)) # GOBIScheduler('energy_latency_'+str(HOSTS))
+	# scheduler = GOBIScheduler('energy_latency_'+str(HOSTS)) # GOBIScheduler('energy_latency_'+str(HOSTS))
+	scheduler = WaggleScheduler()
 
 	# Initialize Environment
-	hostlist = datacenter.generateHosts()
-	if environment != '':
-		env = Framework(scheduler, CONTAINERS, INTERVAL_TIME, hostlist, db, environment, logger)
-	else:
-		env = Simulator(TOTAL_POWER, ROUTER_BW, scheduler, CONTAINERS, INTERVAL_TIME, hostlist)
+	env = Simulator(TOTAL_POWER, ROUTER_BW, scheduler, CONTAINERS, INTERVAL_TIME, hostlist)
+	# NOTE: we disable the framework environment for now
+	# if env != '':
+	# 	# Initialize the db
+	# 	db = Database(DB_NAME, DB_HOST, DB_PORT)
+	# 	env = Framework(scheduler, CONTAINERS, INTERVAL_TIME, hostlist, db, env, logger)
+	# else:
+	# 	env = Simulator(TOTAL_POWER, ROUTER_BW, scheduler, CONTAINERS, INTERVAL_TIME, hostlist)
 	
 	# Initialize stats
 	stats = Stats(env, workload, datacenter, scheduler)
@@ -136,6 +146,7 @@ def initalizeEnvironment(environment, logger):
 	stats.saveStats(deployed, migrations, [], deployed, decision, schedulingTime)
 	return datacenter, workload, scheduler, env, stats
 
+
 def stepSimulation(workload, scheduler, env, stats):
 	newcontainerinfos = workload.generateNewContainers(env.interval) # New containers info
 	if opts.env != '': print(newcontainerinfos)
@@ -155,6 +166,7 @@ def stepSimulation(workload, scheduler, env, stats):
 	printDecisionAndMigrations(decision, migrations)
 
 	stats.saveStats(deployed, migrations, destroyed, selected, decision, schedulingTime)
+
 
 def saveStats(stats, datacenter, workload, env, end=True):
 	dirname = "logs/" + datacenter.__class__.__name__
@@ -188,10 +200,22 @@ def saveStats(stats, datacenter, workload, env, end=True):
 	with open(dirname + '/' + dirname.split('/')[1] +'.pk', 'wb') as handle:
 	    pickle.dump(stats, handle)
 
-if __name__ == '__main__':
-	env, mode = opts.env, int(opts.mode)
 
-	if env != '':
+if __name__ == '__main__':
+	logger.basicConfig(filename=logFile, level=logger.DEBUG,
+		format='%(asctime)s - %(levelname)s - %(message)s')
+	
+	if opts.config != "":
+		with open(opts.config, "r") as file:
+			loaded_config = yaml.safe_load(file)
+		config = dotdict(loaded_config)
+	else:
+		config = opts
+	logger.info(f'configuration: {config}')
+
+	if config.env == "waggle":
+		pass
+	elif config.env != '':
 		# Convert all agent files to unix format
 		unixify(['framework/agent/', 'framework/agent/scripts/'])
 
@@ -201,10 +225,7 @@ if __name__ == '__main__':
 			os.startfile('C:/Program Files/InfluxDB/influxdb-1.8.3-1/influxd.exe')
 
 		configFile = 'framework/config/' + opts.env + '_config.json'
-	    
-		logger.basicConfig(filename=logFile, level=logger.DEBUG,
-	                        format='%(asctime)s - %(levelname)s - %(message)s')
-		logger.debug("Creating enviornment in :{}".format(env))
+		
 		cfg = {}
 		with open(configFile, "r") as f:
 			cfg = json.load(f)
@@ -212,30 +233,32 @@ if __name__ == '__main__':
 		DB_PORT = cfg['database']['port']
 		DB_NAME = 'COSCO'
 
-		if env == 'Vagrant':
+		if config.env == 'Vagrant':
 			print("Setting up VirtualBox environment using Vagrant")
-			HOSTS_IP = setupVagrantEnvironment(configFile, mode)
+			HOSTS_IP = setupVagrantEnvironment(configFile, config.mode)
 			print(HOSTS_IP)
-		elif env == 'VLAN':
+		elif config.env == 'VLAN':
 			print("Setting up VLAN environment using Ansible")
-			HOSTS_IP = setupVLANEnvironment(configFile, mode)
+			HOSTS_IP = setupVLANEnvironment(configFile, config.mode)
 			print(HOSTS_IP)
 		# exit()
 
-	datacenter, workload, scheduler, env, stats = initalizeEnvironment(env, logger)
+	datacenter, workload, scheduler, env, stats = initalizeEnvironment(config, logger)
 
 	for step in range(NUM_SIM_STEPS):
 		print(color.BOLD+"Simulation Interval:", step, color.ENDC)
 		stepSimulation(workload, scheduler, env, stats)
 		if env != '' and step % 10 == 0: saveStats(stats, datacenter, workload, env, end = False)
 
-	if opts.env != '':
-		# Destroy environment if required
-		eval('destroy'+opts.env+'Environment(configFile, mode)')
+	# NOTE: in a simulation mode, nothing should be destroyed.
+	#    we simply comment this out for now.
+	# if opts.env != '':
+	# 	# Destroy environment if required
+	# 	eval('destroy'+opts.env+'Environment(configFile, mode)')
 
-		# Quit InfluxDB
-		if 'Windows' in platform.system():
-			os.system('taskkill /f /im influxd.exe')
+	# 	# Quit InfluxDB
+	# 	if 'Windows' in platform.system():
+	# 		os.system('taskkill /f /im influxd.exe')
 
 	saveStats(stats, datacenter, workload, env)
 

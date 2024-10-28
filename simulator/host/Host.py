@@ -7,8 +7,9 @@ class Host():
 	# RAM = Ram in MB capacity
 	# Disk = Disk characteristics capacity
 	# Bw = Bandwidth characteristics capacity
-	def __init__(self, ID, IPS, RAM, Disk, Bw, Latency, Powermodel, Environment):
-		self.id = ID
+	def __init__(self, IPS, RAM, Disk, Bw, Latency, Powermodel, groupID=0):
+		self.id = -1
+		self.env = None
 		self.ipsCap = IPS
 		self.ramCap = RAM
 		self.diskCap = Disk
@@ -17,7 +18,11 @@ class Host():
 		self.powermodel = Powermodel
 		self.powermodel.allocHost(self)
 		self.powermodel.host = self
-		self.env = Environment
+		self.group = groupID
+
+	def associate(self, myID, env):
+		self.id = myID
+		self.env = env
 
 	def getPower(self):
 		return self.powermodel.power()

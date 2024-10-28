@@ -1,4 +1,5 @@
 import numpy as np
+from simulator.host.Host import *
 from simulator.host.Disk import *
 from simulator.host.RAM import *
 from simulator.host.Bandwidth import *
@@ -65,5 +66,5 @@ class AzureFog():
 			Bw = Bandwidth(self.types[typeID]['BwUp'], self.types[typeID]['BwDown'])
 			Power = eval(self.types[typeID]['Power']+'()')
 			Latency = 0.003 if i < self.edge_hosts else 0.076
-			hosts.append((IPS, Ram, Disk_, Bw, Latency, Power))
+			hosts.append(Host(IPS, Ram, Disk_, Bw, Latency, Power))
 		return hosts
