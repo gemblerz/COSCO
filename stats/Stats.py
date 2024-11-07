@@ -1,21 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import datetime
 from scheduler.GOBI import GOBIScheduler
+from torch.utils.tensorboard import SummaryWriter
+# from tensorboardX import SummaryWriter
 
 plt.style.use(['science'])
 plt.rcParams["text.usetex"] = False
 
 class Stats():
-	def __init__(self, Environment, WorkloadModel, Datacenter, Scheduler):
+	def __init__(self, Environment, WorkloadModel, Datacenter, Scheduler, viz=None):
 		self.env = Environment
 		self.env.stats = self
 		self.workload = WorkloadModel
 		self.datacenter = Datacenter
 		self.scheduler = Scheduler
-		self.simulated_scheduler = GOBIScheduler('energy_latency_'+str(self.datacenter.num_hosts))
-		self.simulated_scheduler.env = self.env
+		# We disabled the GOBI scheduler in the Stats class as it does only predictions
+		# which we do not want, at least for now.
+		# self.simulated_scheduler = GOBIScheduler('energy_latency_'+str(self.datacenter.num_hosts))
+		# self.simulated_scheduler.env = self.env
 		self.initStats()
+		self.viz = SummaryWriter(log_dir=f'./tb/{Scheduler.__module__}/')
 
 	def initStats(self):	
 		self.hostinfo = []
@@ -41,6 +47,24 @@ class Stats():
 		hostinfo['diskavailable'] = [host.getDiskAvailable() for host in self.env.hostlist]
 		self.hostinfo.append(hostinfo)
 
+		# Publish to viz
+		for i, host in enumerate(self.env.hostlist):
+			self.viz.add_scalar(f'Host/cpu/{i}', host.getCPU(), self.env.interval)
+			self.viz.add_scalar(f'Host/numcontainers/{i}', len(self.env.getContainersOfHost(i)), self.env.interval)
+			self.viz.add_scalar(f'Host/power/{i}', host.getPower(), self.env.interval)
+			self.viz.add_scalar(f'Host/baseips/{i}', host.getBaseIPS(), self.env.interval)
+			self.viz.add_scalar(f'Host/ipsavailable/{i}', host.getIPSAvailable(), self.env.interval)
+			self.viz.add_scalar(f'Host/ipscap/{i}', host.ipsCap, self.env.interval)
+			self.viz.add_scalar(f'Host/apparentips/{i}', host.getApparentIPS(), self.env.interval)
+			# getCurrentRAM returns (size, read, write) and we take the size only
+			self.viz.add_scalar(f'Host/ram/{i}', host.getCurrentRAM()[0], self.env.interval)
+			# getRAMAvailable returns (size, read, write) and we take the size only
+			self.viz.add_scalar(f'Host/ramavailable/{i}', host.getRAMAvailable()[0], self.env.interval)
+			# getCurrentDisk returns (size, read, write) and we take the size only
+			self.viz.add_scalar(f'Host/disk/{i}', host.getCurrentDisk()[0], self.env.interval)
+			# getDiskAvailable returns (size, read, write) and we take the size only
+			self.viz.add_scalar(f'Host/diskavailable/{i}', host.getDiskAvailable()[0], self.env.interval)
+
 	def saveWorkloadInfo(self, deployed, migrations):
 		workloadinfo = dict()
 		workloadinfo['interval'] = self.env.interval
@@ -53,6 +77,12 @@ class Stats():
 		workloadinfo['migrations'] = len(migrations)
 		workloadinfo['inqueue'] = len(self.workload.getUndeployedContainers())
 		self.workloadinfo.append(workloadinfo)
+
+		self.viz.add_scalar(f'Containers/total', len(self.workload.createdContainers), self.env.interval)
+		self.viz.add_scalar(f'Containers/new', workloadinfo['newcontainers'], self.env.interval)
+		self.viz.add_scalar(f'Containers/deployed', len(deployed), self.env.interval)
+		self.viz.add_scalar(f'Containers/migrations', len(migrations), self.env.interval)
+		self.viz.add_scalar(f'Containers/inqueue', len(self.workload.getUndeployedContainers()), self.env.interval)
 
 	def saveContainerInfo(self):
 		containerinfo = dict()
@@ -99,8 +129,18 @@ class Stats():
 		metrics['slaviolations'] = len(np.where([c.destroyAt > c.sla for c in destroyed])[0])
 		metrics['slaviolationspercentage'] = metrics['slaviolations'] * 100.0 / len(destroyed) if len(destroyed) > 0 else 0
 		metrics['waittime'] = [c.startAt - c.createAt for c in destroyed]
-		metrics['energytotalinterval_pred'], metrics['avgresponsetime_pred'] = self.runSimulationGOBI()
+		# metrics['energytotalinterval_pred'], metrics['avgresponsetime_pred'] = self.runSimulationGOBI()
 		self.metrics.append(metrics)
+
+		self.viz.add_scalar(f'Stats/numdestroyed', len(destroyed), self.env.interval)
+		self.viz.add_scalar(f'Stats/nummigrations', len(migrations), self.env.interval)
+		# TODO: What is self.env.intervaltime
+		# self.viz.add_scalar(f'Stats/energy', ???, self.env.interval)
+		self.viz.add_scalar(f'Stats/energytotalinterval', np.sum(metrics['energy']), self.env.interval)
+		self.viz.add_scalar(f'Stats/avgresponsetime', metrics['avgresponsetime'], self.env.interval)
+		self.viz.add_scalar(f'Stats/avgmigrationtime', metrics['avgmigrationtime'], self.env.interval)
+		self.viz.add_scalar(f'Stats/slaviolations', metrics['slaviolations'], self.env.interval)
+		self.viz.add_scalar(f'Stats/slaviolationspercentage', metrics['slaviolationspercentage'], self.env.interval)
 
 	def saveSchedulerInfo(self, selectedcontainers, decision, schedulingtime):
 		schedulerinfo = dict()
@@ -120,6 +160,9 @@ class Stats():
 		self.saveAllContainerInfo()
 		self.saveMetrics(destroyed, migrations)
 		self.saveSchedulerInfo(selectedcontainers, decision, schedulingtime)
+
+		## NOTE: I want to add my own metrics here
+		# self.viz.add_scalar("mymetric", 0, self.env.interval)
 
 	def runSimpleSimulation(self, decision):
 		host_alloc = []; container_alloc = [-1] * len(self.env.hostlist)
@@ -285,7 +328,9 @@ class Stats():
 	def generateDatasets(self, dirname):
 		# self.generateDatasetWithInterval(dirname, 'cpu', objfunc='energytotalinterval')
 		self.generateDatasetWithInterval(dirname, 'cpu', metric2='apparentips', objfunc='energytotalinterval', objfunc2='avgresponsetime')
-		self.generateDatasetWithInterval2(dirname, 'cpu', 'apparentips', 'energytotalinterval_pred', 'avgresponsetime_pred', objfunc='energytotalinterval', objfunc2='avgresponsetime')
+
+		# We do not run GOBI prediction so comment it out
+		# self.generateDatasetWithInterval2(dirname, 'cpu', 'apparentips', 'energytotalinterval_pred', 'avgresponsetime_pred', objfunc='energytotalinterval', objfunc2='avgresponsetime')
 		
 	def generateCompleteDatasets(self, dirname):
 		self.generateCompleteDataset(dirname, self.hostinfo, 'hostinfo')

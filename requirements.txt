@@ -18,3 +18,6 @@ cython
 SciencePlots
 seaborn
 tqdm
+
+tensorboard
+pyyaml

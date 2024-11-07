@@ -26,10 +26,10 @@ hosts:
   group: chicago
 - name: W008
   type: wildnode
-  group: chicago
+  group: nu
 - name: W009
   type: wildnode
-  group: chicago
+  group: nu
 - name: W010
   type: wildnode
-  group: chicago
+  group: nu

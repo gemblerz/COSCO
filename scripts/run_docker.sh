@@ -9,6 +9,7 @@ echo "Current directory: $(pwd)"
 echo "Running a Docker container for COSCO..."
 sudo docker run -d \
   --name cosco \
+  --pull always \
   --volume $(pwd):/data \
   gemblerz/cosco
 

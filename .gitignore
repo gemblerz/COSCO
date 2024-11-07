@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 .opera/
+tb/
 *.py[cod]
 *$py.class
 simulator/workload/datasets
